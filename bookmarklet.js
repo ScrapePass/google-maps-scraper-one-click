@@ -1,6 +1,6 @@
 (function () {
   var KEY = '__scrapepassMapsLeads';
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   if (window[KEY]) window[KEY].close();
 
   var onMaps = /(^|\.)google\.[a-z.]+$/.test(location.hostname) && location.pathname.indexOf('/maps') === 0;
@@ -14,17 +14,19 @@
   var GITHUB = 'https://github.com/ScrapePass/google-maps-scraper-one-click';
   var YOUTUBE = 'https://www.youtube.com/@scrapepass';
   var COLS = ['name', 'category', 'rating', 'reviews', 'phone', 'website', 'address', 'hours', 'latitude', 'longitude', 'maps_url'];
+  var PANEL = 'div[role="main"][aria-label]';
+  var READY = 'button[data-item-id="address"], button[data-item-id^="phone:tel:"], a[data-item-id="authority"], button.DkEaL';
 
   var rows = [];
-  var seen = {};
+  var byKey = {};
+  var todo = [];
+  var retry = [];
   var running = false;
+  var asking = false;
   var idle = 0;
   var timer = 0;
-  var queue = [];
+  var opened = 0;
   var current = null;
-  var shown = 0;
-  var lightTimer = 0;
-  var doneMsg = '';
 
   function el(tag, css, text) {
     var e = document.createElement(tag);
@@ -38,6 +40,10 @@
   }
   function parts(line) {
     return line ? line.textContent.split('·').map(function (s) { return s.replace(/\s+/g, ' ').trim(); }).filter(Boolean) : [];
+  }
+  function keyOf(href) {
+    var id = /!1s(0x[0-9a-f]+:0x[0-9a-f]+)/i.exec(href);
+    return id ? id[1] : href.split('?')[0];
   }
 
   function readCard(card) {
@@ -56,7 +62,7 @@
       rating: text(card, '.MW4etd').replace(',', '.'),
       reviews: text(card, '.UY7F9').replace(/\D/g, ''),
       phone: phone,
-      website: site ? site.href : '',
+      website: site ? clean(site.href) : '',
       address: info.length > 1 ? info[info.length - 1] : '',
       hours: hours,
       latitude: ll ? ll[1] : '',
@@ -65,14 +71,56 @@
     };
   }
 
-  var marked = [];
-  function enqueue(card) {
-    if (card.hasAttribute('data-scrapepass')) return;
-    card.setAttribute('data-scrapepass', '');
-    marked.push(card);
-    queue.push(card);
+  function collect() {
+    var links = document.querySelectorAll('div[role="feed"] a.hfpxzc');
+    var added = 0;
+    for (var i = 0; i < links.length; i++) {
+      var card = links[i].closest('.Nv2PK') || links[i].parentElement;
+      var r = card && readCard(card);
+      if (!r) continue;
+      var k = keyOf(links[i].href);
+      if (byKey[k]) continue;
+      byKey[k] = r;
+      rows.push(r);
+      todo.push(k);
+      added++;
+    }
+    return added;
   }
+  function linkFor(k) {
+    var links = document.querySelectorAll('div[role="feed"] a.hfpxzc');
+    for (var i = 0; i < links.length; i++) if (keyOf(links[i].href) === k) return links[i];
+    return null;
+  }
+
+  function panelFor(name) {
+    var panels = document.querySelectorAll(PANEL);
+    for (var i = 0; i < panels.length; i++) {
+      if (panels[i].getAttribute('aria-label').trim() === name && panels[i].querySelector(READY)) return panels[i];
+    }
+    return null;
+  }
+  function readPanel(panel, r) {
+    var cat = text(panel, 'button.DkEaL');
+    var phone = panel.querySelector('button[data-item-id^="phone:tel:"]');
+    var site = panel.querySelector('a[data-item-id="authority"]');
+    var address = panel.querySelector('button[data-item-id="address"]');
+    if (cat) r.category = cat;
+    if (phone) r.phone = text(phone, '.Io6YTe') || phone.getAttribute('data-item-id').replace('phone:tel:', '');
+    if (site && site.href) r.website = clean(site.href);
+    if (address) r.address = text(address, '.Io6YTe') || (address.getAttribute('aria-label') || '').replace(/^[^:]*:\s*/, '').trim();
+  }
+
+  function clean(url) {
+    var q = url.split('#')[0].split('?');
+    var keep = (q[1] || '').split('&').filter(function (p) { return p && !/^(utm_[a-z]+|gclid|fbclid|y_source)=/i.test(p); });
+    return q[0] + (keep.length ? '?' + keep.join('&') : '');
+  }
+
   function paint(card) {
+    if (current) plain(current);
+    current = card;
+    if (!card) return;
     card.style.outline = '2px solid #4f46e5';
     card.style.outlineOffset = '-2px';
     card.style.background = 'rgba(79,70,229,.12)';
@@ -81,28 +129,6 @@
     card.style.outline = '';
     card.style.outlineOffset = '';
     card.style.background = '';
-  }
-  function unmark() {
-    marked.forEach(function (card) {
-      card.removeAttribute('data-scrapepass');
-      plain(card);
-    });
-    marked = [];
-  }
-
-  function collect() {
-    var cards = document.querySelectorAll('div[role="feed"] .Nv2PK');
-    var added = 0;
-    for (var i = 0; i < cards.length; i++) {
-      var r = readCard(cards[i]);
-      if (r) enqueue(cards[i]);
-      if (r && !seen[r.maps_url]) {
-        seen[r.maps_url] = true;
-        rows.push(r);
-        added++;
-      }
-    }
-    return added;
   }
 
   var search = /\/maps\/search\/([^/@?]+)/.exec(location.pathname);
@@ -185,15 +211,19 @@
   dial.appendChild(ring);
   dial.appendChild(middle);
   var place = el('div', 'height:20px;margin-bottom:2px;font-size:14px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;');
-  var status = el('div', 'font-size:15px;color:#57606a;text-align:center;margin-bottom:14px;', 'Press Go to collect the places in this list.');
+  var STATUS = 'font-size:15px;color:#57606a;text-align:center;margin-bottom:14px;';
+  var ASKING = 'font-size:15px;color:#1f2328;text-align:left;margin-bottom:14px;padding:10px 12px;border-radius:8px;background:rgba(79,70,229,.1);';
+  var status = el('div', STATUS, 'Press Go to read every place in this list.');
   var BTN = 'display:block;width:100%;border:1px solid ' + PURPLE + ';background:' + PURPLE + ';color:#fff;border-radius:8px;padding:11px 12px;font:600 15px Roboto,Arial,sans-serif;cursor:pointer;';
   var go = el('button', BTN, 'Go');
+  var fin = el('button', BTN + 'display:none;margin-bottom:8px;background:#fff;color:' + PURPLE + ';', 'Finish');
   var csv = el('button', BTN + 'display:none;', 'Download CSV');
   var buttons = el('div');
   buttons.appendChild(go);
+  buttons.appendChild(fin);
   buttons.appendChild(csv);
   var foot = el('div', 'margin-top:14px;padding-top:12px;border-top:1px solid #eaeef2;font-size:13px;color:#57606a;');
-  foot.appendChild(document.createTextNode('Need details of every place? '));
+  foot.appendChild(document.createTextNode('Need emails too? '));
   foot.appendChild(link('Try the ScrapePass extension, the free web scraper', HOME + UTM));
   var help = el('div', 'margin-top:8px;');
   help.appendChild(document.createTextNode('Something not working? '));
@@ -212,63 +242,141 @@
   [head, dial, place, status, buttons, foot].forEach(function (n) { box.appendChild(n); });
   document.body.appendChild(box);
 
-  function light() {
-    var card = queue.shift();
-    if (card) {
-      if (current) plain(current);
-      paint(card);
-      current = card;
-      card.scrollIntoView({ block: 'start' });
-      var name = card.querySelector('a.hfpxzc');
-      place.textContent = name ? name.getAttribute('aria-label') || '' : '';
-      shown++;
-      count.textContent = String(Math.min(shown, rows.length));
-    }
-    if (card || running) lightTimer = setTimeout(light, 90);
-    else finish();
+  function later(fn, ms) {
+    clearTimeout(timer);
+    timer = setTimeout(fn, ms);
   }
-  function stop(msg) {
+
+  var lost = 0;
+
+  function next() {
+    if (!running) return;
+    var feed = document.querySelector('div[role="feed"]');
+    if (!feed) {
+      if (!asking && ++lost > 6) return ask('The list of places is gone. Drag or zoom the map to load places (press “Search this area” if it shows), or press Finish.');
+      if (!asking) status.textContent = 'Waiting for the list of places…';
+      return later(next, 1500);
+    }
+    lost = 0;
+    var added = collect();
+    if (todo.length) {
+      idle = 0;
+      if (asking) unask();
+      return open(todo.shift());
+    }
+    if (asking) {
+      feed.scrollTop = feed.scrollHeight;
+      return later(next, 1500);
+    }
+    idle = added ? 0 : idle + 1;
+    var note = feed.querySelector('.HlvSq');
+    if (note && note.offsetParent !== null || idle >= 15) {
+      if (retry.length) {
+        todo = retry.splice(0);
+        return later(next, 0);
+      }
+      return ask('No more places in this list. Drag or zoom the map to load more places (press “Search this area” if it shows), or press Finish.');
+    }
+    feed.scrollTop = idle % 2 ? feed.scrollHeight - feed.clientHeight - 400 : feed.scrollHeight;
+    status.textContent = idle > 2 ? 'Waiting for Google Maps to load more…' : 'Scrolling the list for more places…';
+    later(next, 1200);
+  }
+
+  var tries = {};
+  var misses = 0;
+  var moved = false;
+  function open(k, gone) {
+    var r = byKey[k];
+    var a = linkFor(k);
+    if (!a) {
+      gone = gone || 0;
+      if (!moved && gone < 6000 && document.querySelector('div[role="feed"]')) {
+        return later(function () { open(k, gone + 500); }, 500);
+      }
+      moved = true;
+      done();
+      return later(next, 0);
+    }
+    moved = false;
+    paint(a.closest('.Nv2PK') || a.parentElement);
+    place.textContent = r.name;
+    status.textContent = 'Reading place ' + (opened + 1) + ' of ' + rows.length + '…';
+    a.scrollIntoView({ block: 'center' });
+    a.click();
+    var waited = 0;
+    function wait() {
+      if (!running) return;
+      var p = panelFor(r.name);
+      if (p) {
+        misses = 0;
+        return later(function () {
+          if (!running) return;
+          readPanel(panelFor(r.name) || p, r);
+          done();
+          later(next, 600 + Math.random() * 800);
+        }, 800);
+      }
+      waited += 250;
+      if (waited === 20000) {
+        misses++;
+        status.textContent = 'Google Maps is slow to open places. Waiting a moment…';
+      }
+      if (waited < 20000 + Math.min(misses, 4) * 15000) return later(wait, 250);
+      if (tries[k]) done();
+      else retry.push(k);
+      tries[k] = 1;
+      later(next, 0);
+    }
+    later(wait, 250);
+  }
+  function done() {
+    opened++;
+    count.textContent = String(opened);
+  }
+
+  function ask(msg) {
+    asking = true;
+    paint(null);
+    place.textContent = '';
+    if (spin) spin.pause();
+    status.style.cssText = ASKING;
+    status.textContent = msg;
+    fin.style.display = 'block';
+    later(next, 1500);
+  }
+  function unask() {
+    asking = false;
+    status.style.cssText = STATUS;
+    fin.style.display = 'none';
+    if (spin) spin.play();
+  }
+  function end(msg) {
     running = false;
     clearTimeout(timer);
-    doneMsg = msg;
-  }
-  function finish() {
-    if (current) plain(current);
-    current = null;
+    if (asking) unask();
+    paint(null);
     place.textContent = '';
     if (spin) spin.cancel();
     ring.style.borderColor = PURPLE;
     count.textContent = String(rows.length);
-    status.textContent = doneMsg;
-  }
-
-  function scroll() {
-    if (!running) return;
-    var feed = document.querySelector('div[role="feed"]');
-    if (!feed) return stop('The list closed.');
-    var added = collect();
-    if (!queue.length) {
-      idle = added ? 0 : idle + 1;
-      var end = feed.querySelector('.HlvSq');
-      if (end && end.offsetParent !== null && !added) return stop('Done. Download your CSV.');
-      if (idle >= 25) return stop('Google Maps stopped loading more places. Download your CSV.');
-      feed.scrollTop = idle % 2 ? feed.scrollHeight - feed.clientHeight - 400 : feed.scrollHeight;
-      status.textContent = idle > 2 ? 'Waiting for Google Maps to load more…' : 'Scrolling the list…';
-    }
-    timer = setTimeout(scroll, 1200);
+    status.textContent = msg;
   }
 
   function close() {
     running = false;
     clearTimeout(timer);
-    clearTimeout(lightTimer);
-    unmark();
+    paint(null);
     box.remove();
     delete window[KEY];
   }
 
   x.onclick = close;
+  var WIDE = 1200;
   go.onclick = function () {
+    if (window.innerWidth < WIDE) {
+      status.textContent = 'Make the window wider first (maximize it, or zoom the page out with Ctrl or ⌘ and −), then press Go. Google Maps needs room to show each place next to the list.';
+      return;
+    }
     go.style.display = 'none';
     csv.style.display = 'block';
     ready.style.display = 'none';
@@ -276,13 +384,14 @@
     unit.style.display = 'block';
     ring.style.borderTopColor = PURPLE;
     if (ring.animate) spin = ring.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], { duration: 1000, iterations: Infinity });
-    status.textContent = 'Scrolling the list…';
+    status.textContent = 'Opening the places…';
     running = true;
-    scroll();
-    light();
+    next();
+  };
+  fin.onclick = function () {
+    end('Done. Download your CSV.');
   };
   csv.onclick = function () {
-    collect();
     var blob = new Blob([String.fromCharCode(0xfeff) + table()], { type: 'text/csv;charset=utf-8' });
     var a = el('a');
     a.href = URL.createObjectURL(blob);

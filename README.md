@@ -5,8 +5,9 @@
 # 📍 Google Maps Scraper One Click
 
 **Free Google Maps scraper in one bookmark.** Export the businesses from any Google Maps search to a CSV file for
-Excel or Google Sheets: name, category, rating, reviews, phone, website, address, opening status, coordinates and
-map link. No sign-up, no install, no API key, and nothing is sent anywhere.
+Excel or Google Sheets: name, category, rating, reviews, phone, website, full address, opening status, coordinates
+and map link. It opens each place for its details, and when the list runs out you move the map for more. No sign-up,
+no install, no API key, and nothing is sent anywhere.
 
 Ideal for lead generation, market research and local business analysis.
 
@@ -25,10 +26,18 @@ Ideal for lead generation, market research and local business analysis.
 
 1. Search Google Maps for a kind of business in a place, for example **dentist in Chicago**.
 2. Click the **📍 ScrapePass - Google Maps Leads** bookmark. A small panel opens and asks **Ready?**
-3. Press **Go**. The list scrolls by itself until Google Maps reaches the end of the list. A purple highlight moves
-   down the places one by one, and the panel counts the leads as it goes.
-4. Press **Download CSV**. The file is named after your search, for example
-   `ScrapePass Google Maps Leads - dentist in Chicago.csv`.
+3. Press **Go**. The bookmark clicks each place in the list, one at a time, and reads its phone, website and full
+   address from the place's page. The place being read is highlighted in the list, and the panel counts the leads.
+   The list scrolls by itself to load more places.
+4. When the list has no more places, the panel asks you to **drag or zoom the map** to load more places (press
+   "Search this area" if it shows). New places carry on the run by themselves. Press **Finish** when you have
+   enough.
+5. Press **Download CSV**. The file is named after your search, for example
+   `ScrapePass Google Maps Leads - dentist in Chicago.csv`. It works at any time, with the places read so far.
+
+Use a browser window at least 1200 px wide (maximize it, or zoom the page out with `Ctrl` or `⌘` and `−`). In a
+narrower window, Google Maps shows a place instead of the list. Leave "Update results when map moves" unticked while
+it runs: opening a place moves the map, and the list would change under it.
 
 ## Install
 
@@ -65,9 +74,9 @@ One row per place:
 | `category` | Main category on Google Maps | Plumber |
 | `rating` | Average star rating | 4.8 |
 | `reviews` | Number of reviews | 1232 |
-| `phone` | Phone number, when the list shows one | +1 512-555-0142 |
-| `website` | The business website, when the list shows one | https://lonestarplumbing.example |
-| `address` | Street address as shown in the list | 1500 Congress Ave |
+| `phone` | Phone number, from the place's page | +1 512-555-0142 |
+| `website` | The business website, from the place's page | https://lonestarplumbing.example/ |
+| `address` | Full address, from the place's page | 1500 Congress Ave, Austin, TX 78701, United States |
 | `hours` | Opening status when you ran it | Open · Closes 6 PM |
 | `latitude`, `longitude` | Where the place is on the map | 30.2747, -97.7404 |
 | `maps_url` | Link to the place on Google Maps | https://www.google.com/maps/place/… |
@@ -76,7 +85,8 @@ The examples are made up. The CSV is UTF-8 with a byte order mark, so accented l
 
 ## Privacy
 
-Everything happens in your browser. The bookmark reads the list on the page you have open and builds the CSV there.
+Everything happens in your browser. The bookmark reads the list and each place's page on the Google Maps tab you
+have open, and builds the CSV there.
 Nothing is sent to ScrapePass or anyone else, and the panel loads no images, fonts or scripts. The full source code
 is in [`bookmarklet.js`](bookmarklet.js).
 
@@ -86,17 +96,23 @@ is in [`bookmarklet.js`](bookmarklet.js).
 Yes. No account, no limit on how often you use it, and nothing to install.
 
 **How many places can I get from one search?**
-As many as Google Maps shows in the list, usually up to about 120 per search. For more, search smaller areas (one
-neighborhood or ZIP code at a time), or move the map, use "Search this area" and run the bookmark again. If Google
-Maps says you are seeing a limited view, sign in to Google to load the full list.
+Google Maps lists up to about 120 places per search. When the list runs out, drag or zoom the map and the bookmark
+carries on with the new places, skipping the ones it already has. You can also search smaller areas (one
+neighborhood or ZIP code at a time). If Google Maps says you are seeing a limited view, sign in to Google to load the
+full list.
 
 **Why are some phones and websites missing?**
-The bookmark reads the results list. For some kinds of business (dentists, for example) Google Maps shows a
-"Book online" button there instead of a phone and website. To get every place's phone, website and full address,
-use the [ScrapePass Google Maps template](https://scrapepass.com/templates/google-maps), which opens each place.
+Some businesses don't list a phone or website on Google Maps. If a place's page doesn't open in time, its row keeps
+what the list shows.
+
+**Why does it pause sometimes?**
+After many places in a row, Google Maps stops opening places for a while. The panel says so, waits a little and
+carries on. Places it missed get one more try at the end of the list.
 
 **Does it get emails?**
 No. Google Maps does not show emails. The CSV has each business's website, so you can find contact details there.
+The [ScrapePass extension](https://scrapepass.com/?utm_source=github&utm_medium=readme&utm_campaign=google-maps-leads)
+can visit each website and collect its emails.
 
 **Does it work in other languages and countries?**
 Yes. It works on Google Maps in any language and on any Google domain (google.com, google.co.uk, google.de and so
@@ -113,7 +129,7 @@ with.
 
 ## Version
 
-Current version: **1.0.0** (the `VERSION` line at the top of [`bookmarklet.js`](bookmarklet.js)). The panel shows
+Current version: **1.1.0** (the `VERSION` line at the top of [`bookmarklet.js`](bookmarklet.js)). The panel shows
 the version of your bookmark next to "by ScrapePass". If it is older, [add the bookmark](#install) again.
 
 ## Need a more powerful tool?
