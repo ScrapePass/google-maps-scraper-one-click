@@ -18,7 +18,7 @@ Ideal for lead generation, market research and local business analysis.
 
 > **Need a more powerful tool?** [Try ScrapePass, the free web scraper →](https://scrapepass.com/?utm_source=github&utm_medium=readme&utm_campaign=google-maps-leads)
 
-![The Google Maps Leads panel collecting plumbers in Austin, TX: the place being read is highlighted at the top of the list, and the panel counts 14 leads so far](screenshot.png)
+![The Google Maps Leads bookmark at work on "plumber in Taylor TX": it opens each place in turn and counts the leads, then asks to move the map for more; after "Search this area" it reads the new places, and Finish ends the run](demo.gif)
 
 ---
 
